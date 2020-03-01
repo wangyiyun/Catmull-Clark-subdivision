@@ -97,6 +97,19 @@ public:
 	Vect3d operator/(const float rhs) const
 	{	return (rhs==0.0f) ? Vect3d(0.0f, 0.0f, 0.0f) : Vect3d(v[0]/rhs,v[1]/rhs,v[2]/rhs);	}
 
+	bool operator<(const Vect3d& rhs) const
+	{
+		if (v[0] != rhs.v[0])
+		{
+			return v[0] < rhs.v[0];
+		}
+		if (v[1] != rhs.v[1])
+		{
+			return v[1] < rhs.v[1];
+		}
+		return v[2] < rhs.v[2];
+	}
+
 	//multiply by a float, eg 3*v
 	friend Vect3d operator*(float scaleFactor, const Vect3d & rhs);
 
