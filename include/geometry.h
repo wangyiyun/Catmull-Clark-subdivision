@@ -11,12 +11,9 @@ class Surface;
 class Surface
 {
 public:
-	Surface(int n0, int n1, int n2, int n3) {
-		p0 = n0;
-		p1 = n1;
-		p2 = n2;
-		p3 = n3;
-	}
+	Surface(int n0, int n1, int n2, int n3);
+	Surface();
+	bool operator< (const Surface another) const;
 	int p0;
 	int p1;
 	int p2;

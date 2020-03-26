@@ -16,6 +16,8 @@
 #include <time.h>
 #include <string>
 #include <vector>			//Standard template library class
+#include <map>
+#include <set>
 #include <algorithm>
 #include <GL/freeglut.h>
 #include "objGen.h"
@@ -70,22 +72,59 @@ inline float random11() {
 }
 
 TreeNode* treeRoot;
-vector<Vect3d> points;
-vector<Surface> surfaces;
+map<int, Vect3d> points;
+map<Vect3d, int> points_rev;
+map<int, Surface> surfaces;
+map<Surface, int> surfaces_rev;
 
-vector<Vect3d> sub_points;
-vector<Surface> sub_surfaces;
+map<int, Vect3d> sub_points;
+map<Vect3d, int> sub_points_rev;
+map<int, Surface> sub_surfaces;
+map<Surface, int> sub_surfaces_rev;
+map<pair<int, int>, vector<int>> edge_map;	// edge - surface mapper
+map<int, set<int>> node_map;				// node - node mapper
+map<int, int> surface_mid;
+vector<Vect3d> points_ptr;
+vector<Surface> surface_ptr;
+
+template<typename  T> int newObject(map<int, T> &origin, map<T, int> &rev, T newObj)
+{
+	if (rev.find(newObj) != rev.end())
+	{
+		return rev[newObj];
+	}
+	int index = origin.size();
+	origin[index] = newObj;
+	rev[newObj] = index;
+	return index;
+}
+
+void newEdge(int v0, int v1, int f)
+{
+	pair<int, int> index = make_pair(min(v0, v1), max(v0, v1));
+	edge_map[index].push_back(f);
+	node_map[v0].insert(v1);
+	node_map[v1].insert(v0);
+	return;
+}
+
+vector<int> findEdge(int v0, int v1)
+{
+	pair<int, int> index = make_pair(min(v0, v1), max(v0, v1));
+	return edge_map[index];
+}
 
 void saveMesh()
 {
 	vector <TriangleC> tri;   //all the triangles will be stored here
 	tri.clear();
-	for (int i = 0; i < surfaces.size(); i++)
+	for (auto surface_index : surfaces)
 	{
+		Surface surface = surface_index.second;
 		TriangleC tmp;
-		tmp.Set(points[surfaces[i].p0], points[surfaces[i].p1], points[surfaces[i].p2]);
+		tmp.Set(points[surface.p0], points[surface.p1], points[surface.p2]);
 		tri.push_back(tmp);
-		tmp.Set(points[surfaces[i].p0], points[surfaces[i].p2], points[surfaces[i].p3]);
+		tmp.Set(points[surface.p0], points[surface.p2], points[surface.p3]);
 		tri.push_back(tmp);
 	}
 	SaveOBJ(&tri, "MyTreeMesh.obj");
@@ -127,7 +166,7 @@ void GenBox(TreeNode* node)
 		box[j] = box[j].GetRotatedZ(node->angleZ);
 
 		Vect3d nP = node->position + box[j] * weight;
-		points.push_back(nP);
+		newObject(points, points_rev, nP);
 	}
 }
 
@@ -142,7 +181,7 @@ void visitTreeNode(TreeNode* tn, int parentStart)
 	{
 		// is root
 		Surface bottom = Surface(0, 3, 2, 1);	// bottom
-		surfaces.push_back(bottom);
+		newObject(surfaces, surfaces_rev, bottom);
 	}
 	else
 	{
@@ -150,48 +189,48 @@ void visitTreeNode(TreeNode* tn, int parentStart)
 		{
 			// link to parent's top
 			Surface linkFront = Surface(start + 0, start + 3, parentStart + 7, parentStart + 4);
-			surfaces.push_back(linkFront);
 			Surface linkBack = Surface(start + 2, start + 1, parentStart + 5, parentStart + 6);
-			surfaces.push_back(linkBack);
 			Surface linkLeft = Surface(start + 3, start + 2, parentStart + 6, parentStart + 7);
-			surfaces.push_back(linkLeft);
 			Surface linkRight = Surface(start + 1, start + 0, parentStart + 4, parentStart + 5);
-			surfaces.push_back(linkRight);
+			newObject(surfaces, surfaces_rev, linkFront);
+			newObject(surfaces, surfaces_rev, linkBack);
+			newObject(surfaces, surfaces_rev, linkLeft);
+			newObject(surfaces, surfaces_rev, linkRight);
 
 		}
 		else if (tn->linkFace == 1)
 		{
 			// link to parent's left side
 			Surface linkFront = Surface(start + 0, start + 3, parentStart + 3, parentStart + 7);
-			surfaces.push_back(linkFront);
 			Surface linkBack = Surface(start + 2, start + 1, parentStart + 6, parentStart + 2);
-			surfaces.push_back(linkBack);
 			Surface linkLeft = Surface(start + 3, start + 2, parentStart + 2, parentStart + 3);
-			surfaces.push_back(linkLeft);
 			Surface linkRight = Surface(start + 1, start + 0, parentStart + 7, parentStart + 6);
-			surfaces.push_back(linkRight);
+			newObject(surfaces, surfaces_rev, linkFront);
+			newObject(surfaces, surfaces_rev, linkBack);
+			newObject(surfaces, surfaces_rev, linkLeft);
+			newObject(surfaces, surfaces_rev, linkRight);
 		}
 		else
 		{
 			// link to parent's right side
 			Surface linkFront = Surface(start + 0, start + 3, parentStart + 4, parentStart + 0);
-			surfaces.push_back(linkFront);
 			Surface linkBack = Surface(start + 2, start + 1, parentStart + 1, parentStart + 5);
-			surfaces.push_back(linkBack);
 			Surface linkLeft = Surface(start + 3, start + 2, parentStart + 5, parentStart + 4);
-			surfaces.push_back(linkLeft);
 			Surface linkRight = Surface(start + 1, start + 0, parentStart + 0, parentStart + 1);
-			surfaces.push_back(linkRight);
+			newObject(surfaces, surfaces_rev, linkFront);
+			newObject(surfaces, surfaces_rev, linkBack);
+			newObject(surfaces, surfaces_rev, linkLeft);
+			newObject(surfaces, surfaces_rev, linkRight);
 		}
 	}
 
 	// front face
 	Surface frontFace = Surface(start + 0, start + 4, start + 7, start + 3);
-	surfaces.push_back(frontFace);
+	newObject(surfaces, surfaces_rev, frontFace);
 
 	//back face
 	Surface backFace = Surface(start + 1, start + 2, start + 6, start + 5);
-	surfaces.push_back(backFace);
+	newObject(surfaces, surfaces_rev, backFace);
 
 	if (tn->leftNode != NULL)
 	{
@@ -199,21 +238,21 @@ void visitTreeNode(TreeNode* tn, int parentStart)
 		{
 			// child links to my left side -> close my right surface
 			Surface closeRight = Surface(start + 0, start + 1, start + 5, start + 4);
-			surfaces.push_back(closeRight);
+			newObject(surfaces, surfaces_rev, closeRight);
 		}
 		else if (tn->leftNode->linkFace == 2)
 		{
 			// child links to my right side -> close my left surface
 			Surface closeLeft = Surface(start + 2, start + 3, start + 7, start + 6);
-			surfaces.push_back(closeLeft);
+			newObject(surfaces, surfaces_rev, closeLeft);
 		}
 		else
 		{
 			// child links to my top -> close my left and right surface
 			Surface closeLeft = Surface(start + 2, start + 3, start + 7, start + 6);
-			surfaces.push_back(closeLeft);
 			Surface closeRight = Surface(start + 0, start + 1, start + 5, start + 4);
-			surfaces.push_back(closeRight);
+			newObject(surfaces, surfaces_rev, closeLeft);
+			newObject(surfaces, surfaces_rev, closeRight);
 		}
 		visitTreeNode(tn->leftNode, start);
 	}
@@ -248,31 +287,13 @@ void visitTreeNode(TreeNode* tn, int parentStart)
 		// is leaf
 		// top face
 		Surface top = Surface(start + 4, start + 5, start + 6, start + 7);
-		surfaces.push_back(top);
 		Surface leafLeft = Surface(start + 3, start + 7, start + 6, start + 2);
-		surfaces.push_back(leafLeft);
 		Surface leafRight = Surface(start + 5, start + 4, start + 0, start + 1);
-		surfaces.push_back(leafRight);
+		newObject(surfaces, surfaces_rev, top);
+		newObject(surfaces, surfaces_rev, leafLeft);
+		newObject(surfaces, surfaces_rev, leafRight);
 		return;
 	}
-}
-
-Vect3d calTouchSurfMidForLine(int a, int b)
-{
-	vector <int> touchSurf;
-	touchSurf.clear();
-	for (int i = 0; i < surfaces.size(); i++)
-	{
-		if (a == surfaces[i].p0 || a == surfaces[i].p1 || a == surfaces[i].p2 || a == surfaces[i].p3)
-		{
-			if (b == surfaces[i].p0 || b == surfaces[i].p1 || b == surfaces[i].p2 || b == surfaces[i].p3)
-			{
-				touchSurf.push_back(i);
-			}
-		}
-	}
-	// get avg touch surf mid
-	return (sub_points[touchSurf[0]] + sub_points[touchSurf[1]]) / 2;
 }
 
 struct EdgeMid
@@ -289,164 +310,121 @@ struct TouchSurf
 	int e0;
 	int e1;
 };
-vector <TouchSurf> TouchSurfsForPoint;
-vector <int> TouchEdgesForPoint;
 
-int searchEdgeMid(int a, int b)
+int cutEdge(int v0, int v1)
 {
-	for (int i = 0; i < edge_mid_points.size(); i++)
+	vector<int> surfaces = findEdge(v0, v1);
+	if (surfaces.size() != 2)
 	{
-		if ((a == edge_mid_points[i].p0 && b == edge_mid_points[i].p1) || (b == edge_mid_points[i].p0 && a == edge_mid_points[i].p1))
-		{
-			return edge_mid_points[i].sub_points_num;
-		}
+		cout << "Error: There are no two faces adjacent to this edge" << endl;
 	}
-	return -1;
+	Vect3d v2 = sub_points[surface_mid[surfaces[0]]];
+	Vect3d v3 = sub_points[surface_mid[surfaces[1]]];
+	return newObject(sub_points, sub_points_rev, (points[v0] + points[v1] + v2 + v3) / 4);
 }
 
-int calEdgeMid(int a, int b)
+Vect3d newNode(int node_id)
 {
-	// a, b are numbers in vector points
-	Vect3d edgeMid;
-	int searchResult = searchEdgeMid(a, b);
-	if (searchResult == -1)
-	{
-		// can't find this edge's mid point info
-		// push it into sub_points and edge_mid_points
-		EdgeMid tmp;
-		tmp.p0 = a;
-		tmp.p1 = b;
-		// cal edge mid
-		// find avg face mid for this edge
-		Vect3d faceMid = calTouchSurfMidForLine(a, b);
-		edgeMid = (faceMid + (points[a] + points[b]) / 2) / 2;
-		// update edge mid table
-		tmp.sub_points_num = sub_points.size();
-		edge_mid_points.push_back(tmp);
-		// put the new edge mid in to sub_points
-		sub_points.push_back(edgeMid);
-		return tmp.sub_points_num;
-	}
-	else
-	{
-		// have exist midpoint for this edge
-		return searchResult;
-	}
-}
+	set<int> surface_ids;
+	Vect3d Q = Vect3d(0, 0, 0);
+	Vect3d R = Vect3d(0, 0, 0);
 
-void calNewOrinPoint(int p)
-{
-	TouchSurfsForPoint.clear();
-	TouchEdgesForPoint.clear();
-	// find all touching surfaces and edges
-	for (int i = 0; i < surfaces.size(); i++)
+	for (int conn_id : node_map[node_id])
 	{
-		if (p == surfaces[i].p0 || p == surfaces[i].p1 || p == surfaces[i].p2 || p == surfaces[i].p3)
+		for (int surf_id : findEdge(conn_id, node_id))
 		{
-			//find a touching surface!
-			TouchSurf tmp;
-			tmp.surf = i;
-			// inside a touching surface, there will be 2 touching edges
-			// save those two edges number with face
-			if (p == surfaces[i].p0)
-			{
-				// touching edge: p3-p0, p0-p1
-				tmp.e0 = surfaces[i].p3;
-				tmp.e1 = surfaces[i].p1;
-				TouchEdgesForPoint.push_back(surfaces[i].p3);
-				TouchEdgesForPoint.push_back(surfaces[i].p1);
-			}
-			else if (p == surfaces[i].p1)
-			{
-				tmp.e0 = surfaces[i].p0;
-				tmp.e1 = surfaces[i].p2;
-				TouchEdgesForPoint.push_back(surfaces[i].p0);
-				TouchEdgesForPoint.push_back(surfaces[i].p2);
-			}
-			else if (p == surfaces[i].p2)
-			{
-				tmp.e1 = surfaces[i].p1;
-				tmp.e0 = surfaces[i].p3;
-				TouchEdgesForPoint.push_back(surfaces[i].p1);
-				TouchEdgesForPoint.push_back(surfaces[i].p3);
-			}
-			else
-			{
-				tmp.e0 = surfaces[i].p2;
-				tmp.e1 = surfaces[i].p0;
-				TouchEdgesForPoint.push_back(surfaces[i].p2);
-				TouchEdgesForPoint.push_back(surfaces[i].p0);
-			}
-			TouchSurfsForPoint.push_back(tmp);
+			surface_ids.insert(surf_id);
 		}
+		R += points[conn_id];
 	}
-	// clear repeat edge
-	sort(TouchEdgesForPoint.begin(), TouchEdgesForPoint.end());
-	TouchEdgesForPoint.erase(unique(TouchEdgesForPoint.begin(), TouchEdgesForPoint.end()), TouchEdgesForPoint.end());
 
-	if (TouchSurfsForPoint.size() != TouchEdgesForPoint.size())
+	for (int surf_id : surface_ids)
 	{
-		std::cout << "ERROR: at point " << p << endl;
+		Q += sub_points[surface_mid[surf_id]];
 	}
 
-	int n = TouchSurfsForPoint.size();
-
-	// calculate mid of touching surfaces and edges
-	Vect3d touchFaceMid = Vect3d(0, 0, 0);
-	Vect3d touchEdgeMid = Vect3d(0, 0, 0);
-	for (int i = 0; i < n; i++)
-	{
-		touchFaceMid += sub_points[TouchSurfsForPoint[i].surf];
-	}
-	touchFaceMid /= n;
+	int n = node_map[node_id].size();
+	R /= n;
+	Q /= surface_ids.size();
 	
-	for (int i = 0; i < n; i++)
+	return (Q / n) + (R * 2 / n) + (points[node_id] * (n-3) / n);
+}
+
+void init_show()
+{
+	points_ptr.clear();
+	surface_ptr.clear();
+	for (auto point : points)
 	{
-		touchEdgeMid += points[TouchEdgesForPoint[i]] + points[p];
+		points_ptr.push_back(point.second);
 	}
-	touchEdgeMid /= n * 2;
-
-	//cout << p << ": " << TouchSurfsForPoint.size() << " " << TouchEdgesForPoint.size() << endl;
-
-	Vect3d newP = (touchFaceMid + 2 * touchEdgeMid + (n - 3) * points[p]) / n;
-	int newP_in_sub_points = sub_points.size();
-	sub_points.push_back(newP);
-	// for each touching face, search/calculate 2 touching edges' mid point and add an new sub surface
-	// need points:
-	// newP: newP_in_sub_points
-	// surf mid: TouchSurfsForPoint[i].surf
-	// edge0 mid: calEdgeMid(p, TouchSurfsForPoint[i].e0)
-	// edge1 mid: calEdgeMid(p, TouchSurfsForPoint[i].e1)
-	for (int i = 0; i < n; i++)
+	for (auto surface : surfaces)
 	{
-		int edge0Mid = calEdgeMid(p, TouchSurfsForPoint[i].e0);
-		int edge1Mid = calEdgeMid(p, TouchSurfsForPoint[i].e1);
-		Surface newSurf = Surface(newP_in_sub_points, edge0Mid, TouchSurfsForPoint[i].surf, edge1Mid);
-		sub_surfaces.push_back(newSurf);
+		surface_ptr.push_back(surface.second);
 	}
 }
 
 void subdivision()
 {
+	node_map.clear();
+	edge_map.clear();
+	surface_mid.clear();
 	sub_points.clear();
+	sub_points_rev.clear();
 	sub_surfaces.clear();
+	sub_surfaces_rev.clear();
 	edge_mid_points.clear();
+
 	// calculate all surfaces' midpoints and push them to sub points vector
-	for (int i = 0; i < surfaces.size(); i++)
+	for (auto surface: surfaces)
 	{
-		Vect3d surfaceMid = (points[surfaces[i].p0] + points[surfaces[i].p1] + points[surfaces[i].p2] + points[surfaces[i].p3]) / 4;
-		sub_points.push_back(surfaceMid);
+		int surf_i = surface.first;
+		Surface surf_d = surface.second;
+
+		Vect3d surface_mid_p = (points[surf_d.p0] + points[surf_d.p1] + points[surf_d.p2] + points[surf_d.p3]) / 4;
+		surface_mid[surf_i] = newObject(sub_points, sub_points_rev, surface_mid_p);
+
+		newEdge(surf_d.p0, surf_d.p1, surf_i);
+		newEdge(surf_d.p1, surf_d.p2, surf_i);
+		newEdge(surf_d.p2, surf_d.p3, surf_i);
+		newEdge(surf_d.p3, surf_d.p0, surf_i);
 	}
 	//std::cout << "surf mid" << std::endl;
-	
-	for (int i = 0; i < points.size(); i++)
+
+	for (auto surface : surfaces)
 	{
-		calNewOrinPoint(i);
+		int surf_i = surface.first;
+		Surface surf_d = surface.second;
+
+
+		vector<int> newPoints;
+		newPoints.push_back(newObject(sub_points, sub_points_rev, newNode(surf_d.p0)));
+		newPoints.push_back(cutEdge(surf_d.p0, surf_d.p1));
+		newPoints.push_back(newObject(sub_points, sub_points_rev, newNode(surf_d.p1)));
+		newPoints.push_back(cutEdge(surf_d.p1, surf_d.p2));
+		newPoints.push_back(newObject(sub_points, sub_points_rev, newNode(surf_d.p2)));
+		newPoints.push_back(cutEdge(surf_d.p2, surf_d.p3));
+		newPoints.push_back(newObject(sub_points, sub_points_rev, newNode(surf_d.p3)));
+		newPoints.push_back(cutEdge(surf_d.p3, surf_d.p0));
+
+		for (int i = 1; i < 8; i += 2)
+		{
+			newObject(sub_surfaces, sub_surfaces_rev, Surface(
+				newPoints[i%8],
+				newPoints[(i+1)%8],
+				newPoints[(i+2)%8],
+				surface_mid[surf_i])
+			);
+		}
 	}
 
 	//std::cout << "new orin point" << std::endl;
 	points.swap(sub_points);
+	points_rev.swap(sub_points_rev);
 	surfaces.swap(sub_surfaces);
+	surfaces_rev.swap(sub_surfaces_rev);
+
+	init_show();
 }
 
 void initGeometry()
@@ -459,6 +437,7 @@ void initGeometry()
 	{
 		subdivision();
 	}
+	init_show();
 }
 int surfNum = 0;
 void drawGeometry()
@@ -470,9 +449,9 @@ void drawGeometry()
 	//	DrawPoint(points[i + 2], blue);
 	//	DrawPoint(points[i + 3], pink);
 	//}
-	for (int i = 0; i < points.size(); i++)
+	for (auto point: points_ptr)
 	{
-		DrawPoint(points[i], pink);
+		DrawPoint(point, pink);
 	}
 	////debug points
 	//DrawPoint(points[debugPoint], red);
@@ -488,9 +467,9 @@ void drawGeometry()
 	//{
 	//	DrawSurface(points[surfaces[debugSurfaces[i]].p0], points[surfaces[debugSurfaces[i]].p1], points[surfaces[debugSurfaces[i]].p2], points[surfaces[debugSurfaces[i]].p3], yellow);
 	//}
-	for (int i = 0; i < surfaces.size(); i++)
+	for (auto surface: surface_ptr)
 	{
-		DrawSurface(points[surfaces[i].p0], points[surfaces[i].p1], points[surfaces[i].p2], points[surfaces[i].p3], green);
+		DrawSurface(points_ptr[surface.p0], points_ptr[surface.p1], points_ptr[surface.p2], points_ptr[surface.p3], green);
 		//cout << surfaces[i].p0 << " " << surfaces[i].p1 << " " << surfaces[i].p2 << " " << surfaces[i].p3 << endl;
 	}
 	//for (int i = 0; i < sub_surfaces.size(); i++)
@@ -614,7 +593,7 @@ void RenderObjects()
 
 //Add here if you want to control some global behavior
 //see the pointFlag and how is it used
-void Kbd(unsigned char a, int x, int y)//keyboard callback
+void Kbd(unsigned char a, int x, int y) //keyboard callback
 {
 	switch (a)
 	{
